@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useFlightStore } from '@/stores/flightStore'
+
+const store = useFlightStore()
+
 withDefaults(
   defineProps<{
     title: string
@@ -29,7 +33,13 @@ withDefaults(
       <slot />
     </div>
 
-    <span class="instrument__sim" aria-hidden="true">SIM</span>
+    <span
+      class="instrument__sim"
+      :class="{ 'instrument__sim--live': store.mode === 'live' }"
+      aria-hidden="true"
+    >
+      {{ store.mode === 'live' ? 'LIVE' : 'SIM' }}
+    </span>
   </section>
 </template>
 
@@ -144,6 +154,10 @@ withDefaults(
   font-size: 7px;
   letter-spacing: 0.1em;
   pointer-events: none;
+
+  &--live {
+    color: rgba(60, 232, 255, 0.52);
+  }
 }
 
 .instrument__corner {

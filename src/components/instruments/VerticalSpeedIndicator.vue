@@ -106,16 +106,18 @@ const ariaLabel = computed(
         stroke="rgba(141, 188, 216, 0.08)"
       />
 
-      <g v-for="band in bands" :key="`${band.from}-${band.to}`">
-        <rect
-          x="97"
-          :y="band.y"
-          width="10"
-          :height="band.height"
-          rx="3"
-          :fill="band.color"
-          opacity="0.84"
-        />
+      <g v-if="store.mode === 'simulation'">
+        <g v-for="band in bands" :key="`${band.from}-${band.to}`">
+          <rect
+            x="97"
+            :y="band.y"
+            width="10"
+            :height="band.height"
+            rx="3"
+            :fill="band.color"
+            opacity="0.84"
+          />
+        </g>
       </g>
 
       <line
@@ -148,8 +150,10 @@ const ariaLabel = computed(
       </g>
 
       <text x="215" y="35" class="scale-caption">×1000</text>
-      <text x="68" y="47" class="zone-label zone-label--up">UP</text>
-      <text x="68" y="270" class="zone-label zone-label--down">DN</text>
+      <template v-if="store.mode === 'simulation'">
+        <text x="68" y="47" class="zone-label zone-label--up">UP</text>
+        <text x="68" y="270" class="zone-label zone-label--down">DN</text>
+      </template>
 
       <g :transform="`translate(0 ${pointerY})`">
         <line

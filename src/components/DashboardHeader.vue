@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { Maximize2, Minimize2, PlaneTakeoff, Settings } from '@lucide/vue'
+import { computed } from 'vue'
+import { Maximize2, Minimize2, PlaneTakeoff, RadioTower, Settings } from '@lucide/vue'
 import { useFlightStore } from '@/stores/flightStore'
+import { useAttitudeControlStore } from '@/stores/attitudeControlStore'
+import { useLiveTrackingStore } from '@/stores/liveTrackingStore'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const emit = defineEmits<{
@@ -8,7 +11,18 @@ const emit = defineEmits<{
 }>()
 
 const store = useFlightStore()
+const attitude = useAttitudeControlStore()
+const live = useLiveTrackingStore()
 const { isSupported, isFullscreen, toggleFullscreen } = useFullscreen()
+
+const isLive = computed(() => store.mode === 'live')
+
+const statusText = computed(() => {
+  if (isLive.value) return live.statusLabel
+  if (attitude.mode === 'device') return `DEVICE MOTION ${attitude.sensorStatus.toUpperCase()}`
+  if (attitude.active) return `${attitude.modeLabel} ACTIVE`
+  return store.running ? 'SIMULATION ACTIVE' : 'SIMULATION PAUSED'
+})
 </script>
 
 <template>
@@ -18,15 +32,27 @@ const { isSupported, isFullscreen, toggleFullscreen } = useFullscreen()
         <PlaneTakeoff :size="23" :stroke-width="1.8" />
       </span>
       <div class="brand__copy">
-        <span class="brand__eyebrow">PFD / FLIGHT SIMULATOR</span>
+        <span class="brand__eyebrow">
+          {{ isLive ? 'PFD / LIVE ADS-B' : 'PFD / FLIGHT SIMULATOR' }}
+        </span>
         <h1 class="brand__title">Aircraft Flight Instruments</h1>
       </div>
     </div>
 
     <div class="header-status">
-      <span class="status-pill" :class="{ 'status-pill--paused': !store.running }">
+      <span
+        class="status-pill"
+        :class="{
+          'status-pill--paused': !isLive && !store.running && !attitude.active,
+          'status-pill--live': isLive && live.status === 'live',
+          'status-pill--warning':
+            isLive && (live.status === 'loading' || live.status === 'stale'),
+          'status-pill--error':
+            isLive && (live.status === 'lost' || live.status === 'error'),
+        }"
+      >
         <span class="status-pill__dot" aria-hidden="true" />
-        {{ store.running ? 'SIMULATION ACTIVE' : 'SIMULATION PAUSED' }}
+        {{ statusText }}
       </span>
 
       <div class="flight-mode">
@@ -36,6 +62,17 @@ const { isSupported, isFullscreen, toggleFullscreen } = useFullscreen()
     </div>
 
     <div class="header-actions">
+      <button
+        type="button"
+        class="header-button"
+        :class="{ 'header-button--active': isLive }"
+        aria-label="Open live aircraft tracking"
+        title="Track live ADS-B aircraft"
+        @click="live.openPicker()"
+      >
+        <RadioTower :size="18" />
+      </button>
+
       <button
         type="button"
         class="header-button"
@@ -158,7 +195,8 @@ const { isSupported, isFullscreen, toggleFullscreen } = useFullscreen()
   border-radius: 999px;
   background: rgba(61, 245, 154, 0.06);
 
-  &--paused {
+  &--paused,
+  &--warning {
     color: var(--amber);
     border-color: rgba(255, 194, 71, 0.28);
     background: rgba(255, 194, 71, 0.07);
@@ -167,6 +205,29 @@ const { isSupported, isFullscreen, toggleFullscreen } = useFullscreen()
       animation: none;
       background: var(--amber);
       box-shadow: 0 0 7px rgba(255, 194, 71, 0.75);
+    }
+  }
+
+  &--live {
+    color: var(--cyan);
+    border-color: rgba(60, 232, 255, 0.28);
+    background: rgba(60, 232, 255, 0.06);
+
+    .status-pill__dot {
+      background: var(--cyan);
+      box-shadow: 0 0 7px rgba(60, 232, 255, 0.8);
+    }
+  }
+
+  &--error {
+    color: var(--red);
+    border-color: rgba(255, 93, 108, 0.3);
+    background: rgba(255, 93, 108, 0.06);
+
+    .status-pill__dot {
+      animation: none;
+      background: var(--red);
+      box-shadow: 0 0 7px rgba(255, 93, 108, 0.75);
     }
   }
 }
@@ -235,6 +296,12 @@ const { isSupported, isFullscreen, toggleFullscreen } = useFullscreen()
 
   &:active:not(:disabled) {
     transform: translateY(1px);
+  }
+
+  &--active {
+    color: var(--cyan);
+    border-color: rgba(60, 232, 255, 0.36);
+    background: rgba(60, 232, 255, 0.08);
   }
 
   @include focus-visible;

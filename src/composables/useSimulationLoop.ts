@@ -1,8 +1,11 @@
-import { onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useFlightStore } from '@/stores/flightStore'
+import { useAttitudeControlStore } from '@/stores/attitudeControlStore'
 
 export function useSimulationLoop(): void {
   const store = useFlightStore()
+  const attitude = useAttitudeControlStore()
+  const shouldRun = computed(() => store.mode === 'live' || store.running || attitude.active)
 
   let frameId = 0
   let lastTimestamp = 0
@@ -13,6 +16,7 @@ export function useSimulationLoop(): void {
     lastTimestamp = timestamp
 
     store.tick(deltaSeconds)
+    attitude.tick(deltaSeconds)
     frameId = requestAnimationFrame(frame)
   }
 
@@ -32,23 +36,20 @@ export function useSimulationLoop(): void {
   function handleVisibilityChange(): void {
     if (document.hidden) {
       stop()
-    } else if (store.running) {
+    } else if (shouldRun.value) {
       start()
     }
   }
 
   onMounted(() => {
-    if (store.running) start()
+    if (shouldRun.value) start()
     document.addEventListener('visibilitychange', handleVisibilityChange)
   })
 
-  watch(
-    () => store.running,
-    (running) => {
-      if (running && !document.hidden) start()
-      else stop()
-    },
-  )
+  watch(shouldRun, (run) => {
+    if (run && !document.hidden) start()
+    else stop()
+  })
 
   onBeforeUnmount(() => {
     stop()

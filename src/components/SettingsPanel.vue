@@ -15,6 +15,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useFlightStore()
+const isLive = computed(() => store.mode === 'live')
 const closeButton = ref<HTMLButtonElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
 let previousBodyOverflow = ''
@@ -191,6 +192,7 @@ onBeforeUnmount(() => {
                 id="aircraft-profile"
                 class="settings-select"
                 :value="store.activeProfileId"
+                :disabled="isLive"
                 @change="handleProfileChange"
               >
                 <option
@@ -224,6 +226,7 @@ onBeforeUnmount(() => {
                     max="31"
                     step="0.01"
                     :value="store.baro.toFixed(2)"
+                    :disabled="isLive"
                     @change="handleBaroChange"
                   />
                   <span class="settings-field__unit">IN</span>
@@ -242,6 +245,7 @@ onBeforeUnmount(() => {
                     type="checkbox"
                     class="toggle-input"
                     :checked="store.turbulence"
+                    :disabled="isLive"
                     @change="handleTurbulenceChange"
                   />
                   <span class="toggle-thumb" aria-hidden="true" />
@@ -249,7 +253,7 @@ onBeforeUnmount(() => {
               </label>
             </section>
 
-            <section class="settings-section">
+            <section v-if="!isLive" class="settings-section">
               <h3 class="settings-section__title">Configured Thresholds</h3>
               <div class="threshold-grid">
                 <div
@@ -270,9 +274,20 @@ onBeforeUnmount(() => {
               </div>
             </section>
 
+            <p v-else class="settings-note">
+              Live ADS-B mode uses generic display scales. Aircraft-specific warning
+              thresholds are unavailable, so profile and barometric inputs are disabled.
+            </p>
+
             <p class="settings-disclaimer">
-              Ranges and warning thresholds change with the selected aircraft
-              profile. This simulator is for education and demonstration only.
+              <template v-if="isLive">
+                Live attitude is estimated from flight path and is not a real attitude
+                source. IAS, pitch, and slip/skid may be unavailable.
+              </template>
+              <template v-else>
+                Ranges and warning thresholds change with the selected aircraft
+                profile. This simulator is for education and demonstration only.
+              </template>
             </p>
           </div>
 
@@ -280,6 +295,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="settings-action"
+              :disabled="isLive"
               @click="store.reset()"
             >
               <RotateCcw :size="15" aria-hidden="true" />
@@ -424,6 +440,11 @@ onBeforeUnmount(() => {
   padding: 0 10px;
   cursor: pointer;
 
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
   &:focus {
     border-color: rgba(60, 232, 255, 0.6);
     outline: none;
@@ -459,6 +480,11 @@ onBeforeUnmount(() => {
   height: 36px;
   padding: 0 8px;
   text-align: right;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
 
   &:focus {
     border-color: rgba(60, 232, 255, 0.6);
@@ -633,9 +659,14 @@ onBeforeUnmount(() => {
     color 150ms ease,
     border-color 150ms ease;
 
-  &:hover {
+  &:hover:not(:disabled) {
     color: var(--cyan);
     border-color: rgba(60, 232, 255, 0.3);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
   }
 
   &--primary {
