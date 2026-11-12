@@ -59,9 +59,26 @@ const bands = computed(() => {
 const tapeOffset = computed(() => store.display.airspeed * SCALE)
 const readout = computed(() => Math.round(store.display.airspeed))
 
-const ariaLabel = computed(
-  () => `Airspeed indicator. Indicated airspeed ${readout.value} knots.`,
+const sourceLabel = computed(() =>
+  store.mode === 'live' ? store.liveMeta.airspeedKind : 'IAS',
 )
+
+const readoutLabel = computed(() =>
+  store.mode === 'live' ? store.liveMeta.airspeedKind : 'KNOTS',
+)
+
+const ariaLabel = computed(() => {
+  if (store.mode === 'live') {
+    const kind =
+      store.liveMeta.airspeedKind === 'GS'
+        ? 'Ground speed'
+        : store.liveMeta.airspeedKind === 'IAS'
+          ? 'Indicated airspeed'
+          : 'True airspeed'
+    return `Airspeed indicator. ${kind} ${readout.value} knots, from live ADS-B data.`
+  }
+  return `Airspeed indicator. Indicated airspeed ${readout.value} knots.`
+})
 </script>
 
 <template>
@@ -107,16 +124,18 @@ const ariaLabel = computed(
 
       <g clip-path="url(#asi-tape-clip)">
         <g :transform="`translate(0 ${tapeOffset})`">
-          <rect
-            v-for="band in bands"
-            :key="`${band.from}-${band.to}`"
-            x="198"
-            :y="band.y"
-            width="9"
-            :height="band.height"
-            :fill="band.color"
-            opacity="0.82"
-          />
+          <g v-if="store.mode === 'simulation'">
+            <rect
+              v-for="band in bands"
+              :key="`${band.from}-${band.to}`"
+              x="198"
+              :y="band.y"
+              width="9"
+              :height="band.height"
+              :fill="band.color"
+              opacity="0.82"
+            />
+          </g>
 
           <g v-for="tick in ticks" :key="tick.value">
             <line
@@ -139,6 +158,7 @@ const ariaLabel = computed(
           </g>
 
           <line
+            v-if="store.mode === 'simulation'"
             :x1="206"
             :x2="228"
             :y1="CENTER_Y - store.profile.airspeed.bands.redline * SCALE"
@@ -152,7 +172,7 @@ const ariaLabel = computed(
         <rect x="54" y="260" width="212" height="44" fill="url(#asi-fade-bottom)" />
       </g>
 
-      <text x="62" y="32" class="tape-caption">IAS</text>
+      <text x="62" y="32" class="tape-caption">{{ sourceLabel }}</text>
       <text x="216" y="32" class="tape-caption" text-anchor="end">×100</text>
 
       <path
@@ -177,11 +197,13 @@ const ariaLabel = computed(
           {{ formatNumber(readout) }}
         </text>
         <text x="160" y="178" class="readout-unit" text-anchor="middle">
-          KNOTS
+          {{ readoutLabel }}
         </text>
       </g>
 
-      <text x="62" y="292" class="tape-caption">SIM INPUT</text>
+      <text x="62" y="292" class="tape-caption">
+        {{ store.mode === 'live' ? 'ADS-B' : 'SIM INPUT' }}
+      </text>
       <text x="258" y="292" class="tape-caption" text-anchor="end">
         {{ store.profile.shortName }}
       </text>

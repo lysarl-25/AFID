@@ -11,6 +11,8 @@ export interface FlightData {
 
 export type FlightKey = keyof FlightData
 
+export type FlightMode = 'simulation' | 'live'
+
 export type AircraftProfileId = 'businessJet' | 'lightTrainer'
 
 export type FlightPreset = 'level' | 'climb' | 'descent'

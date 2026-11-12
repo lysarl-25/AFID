@@ -47,17 +47,27 @@ const ballPosition = computed(() => {
   }
 })
 
-const ariaLabel = computed(
-  () =>
-    `Turn coordinator. Turn rate ${formatSigned(store.display.turnRate, 1)} degrees per second. Slip skid ${formatSigned(store.display.slipSkid, 2)}.`,
+const unitLabel = computed(() =>
+  store.mode === 'live' ? 'TURN / N/A' : 'TURN / SLIP',
 )
+
+const ballValue = computed(() =>
+  store.mode === 'live' ? 'N/A' : formatSigned(store.display.slipSkid, 2),
+)
+
+const ariaLabel = computed(() => {
+  if (store.mode === 'live') {
+    return `Turn coordinator. Turn rate ${formatSigned(store.display.turnRate, 1)} degrees per second. Slip skid is unavailable from ADS-B data.`
+  }
+  return `Turn coordinator. Turn rate ${formatSigned(store.display.turnRate, 1)} degrees per second. Slip skid ${formatSigned(store.display.slipSkid, 2)}.`
+})
 </script>
 
 <template>
   <InstrumentFrame
     title="Turn Coordinator"
     code="TC"
-    unit="TURN / SLIP"
+    :unit="unitLabel"
     :label="ariaLabel"
   >
     <svg viewBox="0 0 320 320" aria-hidden="true">
@@ -164,20 +174,25 @@ const ariaLabel = computed(
       <text x="82" y="235" class="tube-label" text-anchor="middle">L</text>
       <text x="238" y="235" class="tube-label" text-anchor="middle">R</text>
 
-      <circle
-        :cx="ballPosition.x"
-        :cy="ballPosition.y"
-        r="8.6"
-        fill="url(#tc-ball)"
-        stroke="#223949"
-        stroke-width="1"
-      />
-      <circle
-        :cx="ballPosition.x - 2.5"
-        :cy="ballPosition.y - 2.8"
-        r="2"
-        fill="rgba(255, 255, 255, 0.85)"
-      />
+      <template v-if="store.mode === 'simulation'">
+        <circle
+          :cx="ballPosition.x"
+          :cy="ballPosition.y"
+          r="8.6"
+          fill="url(#tc-ball)"
+          stroke="#223949"
+          stroke-width="1"
+        />
+        <circle
+          :cx="ballPosition.x - 2.5"
+          :cy="ballPosition.y - 2.8"
+          r="2"
+          fill="rgba(255, 255, 255, 0.85)"
+        />
+      </template>
+      <text v-else x="160" y="239" class="unavailable-label" text-anchor="middle">
+        N/A
+      </text>
 
       <text x="160" y="276" class="tube-caption" text-anchor="middle">
         SLIP / SKID
@@ -214,7 +229,7 @@ const ariaLabel = computed(
           BALL
         </text>
         <text x="220" y="302" class="data-value" text-anchor="middle">
-          {{ formatSigned(store.display.slipSkid, 2) }}
+          {{ ballValue }}
         </text>
       </g>
     </svg>
@@ -248,6 +263,14 @@ const ariaLabel = computed(
   font-size: 7px;
   letter-spacing: 0.16em;
   fill: rgba(125, 149, 171, 0.62);
+}
+
+.unavailable-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  fill: rgba(255, 194, 71, 0.62);
 }
 
 .data-label {

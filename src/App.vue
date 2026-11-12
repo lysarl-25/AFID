@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import DashboardHeader from '@/components/DashboardHeader.vue'
 import FlightControlPanel from '@/components/FlightControlPanel.vue'
+import LiveFlightPicker from '@/components/LiveFlightPicker.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import AirspeedIndicator from '@/components/instruments/AirspeedIndicator.vue'
 import AttitudeIndicator from '@/components/instruments/AttitudeIndicator.vue'
@@ -11,9 +12,11 @@ import HeadingIndicator from '@/components/instruments/HeadingIndicator.vue'
 import TurnCoordinator from '@/components/instruments/TurnCoordinator.vue'
 import { useSimulationLoop } from '@/composables/useSimulationLoop'
 import { useFlightStore } from '@/stores/flightStore'
+import { useLiveTrackingStore } from '@/stores/liveTrackingStore'
 
 const settingsOpen = ref(false)
 const store = useFlightStore()
+const live = useLiveTrackingStore()
 
 useSimulationLoop()
 </script>
@@ -38,14 +41,26 @@ useSimulationLoop()
     <footer class="app-footer">
       <span class="app-footer__warning">
         <span class="app-footer__dot" aria-hidden="true" />
-        Simulated data — educational use only. Not for navigation or flight.
+        <template v-if="store.mode === 'live'">
+          Live ADS-B data — delayed and incomplete. Not for navigation or flight.
+        </template>
+        <template v-else>
+          Simulated data — educational use only. Not for navigation or flight.
+        </template>
       </span>
       <span class="app-footer__meta">
-        {{ store.profile.name }} · BARO {{ store.baro.toFixed(2) }} IN
+        <template v-if="store.mode === 'live'">
+          {{ live.selectedName || 'ADS-B' }} · {{ live.provider || 'community feed' }} ·
+          {{ live.statusLabel }}
+        </template>
+        <template v-else>
+          {{ store.profile.name }} · BARO {{ store.baro.toFixed(2) }} IN
+        </template>
       </span>
     </footer>
 
     <SettingsPanel v-model:open="settingsOpen" />
+    <LiveFlightPicker />
   </div>
 </template>
 

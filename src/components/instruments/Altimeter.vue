@@ -25,17 +25,33 @@ const ticks = computed(() =>
 const tapeOffset = computed(() => store.display.altitude * SCALE)
 const readout = computed(() => Math.round(store.display.altitude / 10) * 10)
 
-const ariaLabel = computed(
-  () =>
-    `Altimeter. Altitude ${formatNumber(readout.value)} feet. Barometric setting ${store.baro.toFixed(2)} inches of mercury.`,
-)
+const unitLabel = computed(() => {
+  if (store.mode !== 'live') return 'FT'
+  return store.liveMeta.altitudeKind === 'GNSS' ? 'FT GNSS' : 'FT STD'
+})
+
+const baroValue = computed(() => {
+  if (store.mode !== 'live') return `${store.baro.toFixed(2)} IN`
+  return store.liveMeta.altitudeKind === 'GNSS' ? 'GNSS' : 'STD 29.92'
+})
+
+const ariaLabel = computed(() => {
+  if (store.mode === 'live') {
+    const source =
+      store.liveMeta.altitudeKind === 'GNSS'
+        ? 'GNSS altitude'
+        : 'pressure altitude with standard pressure setting'
+    return `Altimeter. ${source} ${formatNumber(readout.value)} feet, from live ADS-B data.`
+  }
+  return `Altimeter. Altitude ${formatNumber(readout.value)} feet. Barometric setting ${store.baro.toFixed(2)} inches of mercury.`
+})
 </script>
 
 <template>
   <InstrumentFrame
     title="Altimeter"
     code="ALT"
-    unit="FT"
+    :unit="unitLabel"
     :label="ariaLabel"
   >
     <svg viewBox="0 0 320 320" aria-hidden="true">
@@ -139,11 +155,13 @@ const ariaLabel = computed(
         />
         <text x="96" y="271" class="baro-label">BARO</text>
         <text x="224" y="271" class="baro-value" text-anchor="end">
-          {{ store.baro.toFixed(2) }} IN
+          {{ baroValue }}
         </text>
       </g>
 
-      <text x="70" y="292" class="tape-caption">SIM INPUT</text>
+      <text x="70" y="292" class="tape-caption">
+        {{ store.mode === 'live' ? 'ADS-B' : 'SIM INPUT' }}
+      </text>
       <text x="250" y="292" class="tape-caption" text-anchor="end">
         {{ store.profile.shortName }}
       </text>

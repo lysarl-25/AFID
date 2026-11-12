@@ -46,17 +46,26 @@ const cardTransform = computed(
 
 const headingText = computed(() => formatHeading(store.display.heading))
 
-const ariaLabel = computed(
-  () =>
-    `Heading indicator. Current heading ${Math.round(normalizeHeading(store.display.heading)) % 360} degrees magnetic.`,
+const headingKind = computed(() =>
+  store.mode === 'live' && store.liveMeta.headingKind === 'TRK' ? 'TRK' : 'MAG',
 )
+
+const headingLabel = computed(() =>
+  headingKind.value === 'TRK' ? 'TRACK' : 'MAG HDG',
+)
+
+const ariaLabel = computed(() => {
+  const kind = headingKind.value === 'TRK' ? 'track' : 'magnetic heading'
+  const suffix = store.mode === 'live' ? ', from live ADS-B data' : ''
+  return `Heading indicator. Current ${kind} ${Math.round(normalizeHeading(store.display.heading)) % 360} degrees${suffix}.`
+})
 </script>
 
 <template>
   <InstrumentFrame
     title="Heading Indicator"
     code="HDG"
-    unit="MAG"
+    :unit="headingKind"
     :label="ariaLabel"
   >
     <svg viewBox="0 0 320 320" aria-hidden="true">
@@ -174,7 +183,7 @@ const ariaLabel = computed(
           {{ headingText }}
         </text>
         <text x="160" y="191" class="heading-unit" text-anchor="middle">
-          MAG HDG
+          {{ headingLabel }}
         </text>
       </g>
 

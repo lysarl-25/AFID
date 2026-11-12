@@ -4,14 +4,17 @@ import {
   AIRCRAFT_PROFILES,
   DEFAULT_FLIGHT_DATA,
   DEFAULT_PROFILE_ID,
+  LIVE_PROFILE,
 } from '@/data/aircraftProfiles'
 import type {
   AircraftProfileId,
   ControlDefinition,
   FlightData,
   FlightKey,
+  FlightMode,
   FlightPreset,
 } from '@/types/flight'
+import type { LiveMeta, LiveSnapshot } from '@/types/live'
 import {
   clamp,
   normalizeHeading,
@@ -68,16 +71,29 @@ const PRESET_VALUES: Record<FlightPreset, Partial<FlightData>> = {
 
 export const useFlightStore = defineStore('flight', () => {
   const activeProfileId = ref<AircraftProfileId>(DEFAULT_PROFILE_ID)
+  const mode = ref<FlightMode>('simulation')
   const running = ref(true)
   const turbulence = ref(true)
   const baro = ref(AIRCRAFT_PROFILES[DEFAULT_PROFILE_ID].baro)
   const simTime = ref(0)
 
-  const profile = computed(() => AIRCRAFT_PROFILES[activeProfileId.value])
+  const profile = computed(() =>
+    mode.value === 'live' ? LIVE_PROFILE : AIRCRAFT_PROFILES[activeProfileId.value],
+  )
 
   const target = reactive<FlightData>({ ...DEFAULT_FLIGHT_DATA })
   const smoothed = reactive<FlightData>({ ...DEFAULT_FLIGHT_DATA })
   const display = reactive<FlightData>({ ...DEFAULT_FLIGHT_DATA })
+  const liveMeta = reactive<LiveMeta>({
+    onGround: false,
+    airspeedKind: 'GS',
+    headingKind: 'TRK',
+    altitudeKind: null,
+    attitudeEstimated: true,
+    slipAvailable: false,
+    source: '',
+    seenSeconds: 0,
+  })
 
   const controls = computed<ControlDefinition[]>(() => {
     const aircraft = profile.value
@@ -175,7 +191,8 @@ export const useFlightStore = defineStore('flight', () => {
   })
 
   const flightMode = computed(() => {
-    if (!running.value) return 'PAUSED'
+    if (mode.value === 'simulation' && !running.value) return 'PAUSED'
+    if (mode.value === 'live' && liveMeta.onGround) return 'GROUND'
 
     if (Math.abs(display.turnRate) >= 0.5) {
       return display.turnRate > 0 ? 'TURN RIGHT' : 'TURN LEFT'
@@ -202,6 +219,8 @@ export const useFlightStore = defineStore('flight', () => {
   }
 
   function setField(key: FlightKey, value: number): void {
+    if (mode.value === 'live') return
+
     const next = sanitize(key, value)
     target[key] = next
 
@@ -222,11 +241,12 @@ export const useFlightStore = defineStore('flight', () => {
   }
 
   function setBaro(value: number): void {
+    if (mode.value === 'live') return
     baro.value = Number(clamp(value, 28, 31).toFixed(2))
   }
 
   function setProfile(id: AircraftProfileId): void {
-    if (!AIRCRAFT_PROFILES[id]) return
+    if (mode.value === 'live' || !AIRCRAFT_PROFILES[id]) return
 
     activeProfileId.value = id
     baro.value = profile.value.baro
@@ -251,18 +271,52 @@ export const useFlightStore = defineStore('flight', () => {
   }
 
   function applyPreset(preset: FlightPreset): void {
+    if (mode.value === 'live') return
     for (const [key, value] of Object.entries(PRESET_VALUES[preset])) {
       setField(key as FlightKey, value)
     }
   }
 
   function toggleRunning(): void {
+    if (mode.value === 'live') return
     running.value = !running.value
     if (!running.value) snapToTarget()
   }
 
+  function setMode(nextMode: FlightMode): void {
+    if (mode.value === nextMode) return
+
+    mode.value = nextMode
+    if (nextMode === 'simulation') {
+      running.value = true
+      reset()
+    }
+  }
+
+  function applyLiveSnapshot(snapshot: LiveSnapshot, snap = false): void {
+    if (mode.value !== 'live') return
+
+    Object.assign(liveMeta, snapshot.meta)
+
+    for (const key of FLIGHT_KEYS) {
+      const value = snapshot.data[key]
+      const next =
+        typeof value === 'number' && Number.isFinite(value) ? sanitize(key, value) : 0
+
+      if (snap) {
+        target[key] = next
+        smoothed[key] = next
+        display[key] = next
+      } else if (typeof value === 'number' && Number.isFinite(value)) {
+        target[key] = next
+      }
+    }
+
+    if (snap) simTime.value = 0
+  }
+
   function tick(deltaSeconds: number): void {
-    if (!running.value) return
+    if (mode.value === 'simulation' && !running.value) return
 
     const dt = Math.min(Math.max(deltaSeconds, 0), 0.1)
     simTime.value += dt
@@ -283,7 +337,7 @@ export const useFlightStore = defineStore('flight', () => {
       display[key] = smoothed[key]
     }
 
-    if (turbulence.value) {
+    if (mode.value === 'simulation' && turbulence.value) {
       const airspeedLimits = controlByKey.value.airspeed
       const altitudeLimits = controlByKey.value.altitude
       const pitchLimits = controlByKey.value.pitch
@@ -326,6 +380,7 @@ export const useFlightStore = defineStore('flight', () => {
 
   return {
     activeProfileId,
+    mode,
     profile,
     running,
     turbulence,
@@ -333,6 +388,7 @@ export const useFlightStore = defineStore('flight', () => {
     simTime,
     target,
     display,
+    liveMeta,
     controls,
     controlByKey,
     flightMode,
@@ -341,6 +397,8 @@ export const useFlightStore = defineStore('flight', () => {
     setBaro,
     setProfile,
     reset,
+    setMode,
+    applyLiveSnapshot,
     applyPreset,
     toggleRunning,
     tick,

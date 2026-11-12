@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import InstrumentFrame from '@/components/ui/InstrumentFrame.vue'
 import { useFlightStore } from '@/stores/flightStore'
+import { useAttitudeControlStore } from '@/stores/attitudeControlStore'
 import { describeArc, polarToCartesian } from '@/utils/svg'
 import { formatSigned } from '@/utils/format'
 
@@ -9,6 +10,9 @@ const CENTER = 160
 const PITCH_SCALE = 4.2
 
 const store = useFlightStore()
+const attitude = useAttitudeControlStore()
+const pitch = computed(() => attitude.active ? attitude.display.pitch : store.display.pitch)
+const roll = computed(() => attitude.active ? attitude.display.roll : store.display.roll)
 
 const pitchMarks = Array.from({ length: 13 }, (_, index) => {
   const value = (index - 6) * 5
@@ -37,16 +41,22 @@ const rollLabels = [-60, -30, 30, 60].map((angle) => {
 
 const horizonTransform = computed(
   () =>
-    `rotate(${-store.display.roll} ${CENTER} ${CENTER}) translate(0 ${store.display.pitch * PITCH_SCALE})`,
+    `rotate(${-roll.value} ${CENTER} ${CENTER}) translate(0 ${pitch.value * PITCH_SCALE})`,
 )
 
 const rollPointerTransform = computed(
-  () => `rotate(${store.display.roll} ${CENTER} ${CENTER})`,
+  () => `rotate(${roll.value} ${CENTER} ${CENTER})`,
+)
+
+const unitLabel = computed(() =>
+  attitude.active ? `${attitude.modeLabel} / PITCH / ROLL` : store.mode === 'live' && store.liveMeta.attitudeEstimated
+    ? 'EST PITCH / ROLL'
+    : 'PITCH / ROLL',
 )
 
 const ariaLabel = computed(
   () =>
-    `Attitude indicator. Pitch ${formatSigned(store.display.pitch, 1)} degrees, roll ${formatSigned(store.display.roll, 1)} degrees.`,
+    `Attitude indicator. ${attitude.modeLabel}. Pitch ${formatSigned(pitch.value, 1)} degrees, roll ${formatSigned(roll.value, 1)} degrees.${store.mode === 'live' ? ' Attitude is estimated from ADS-B data and is not a real attitude source.' : ''}`,
 )
 </script>
 
@@ -54,7 +64,7 @@ const ariaLabel = computed(
   <InstrumentFrame
     title="Attitude Indicator"
     code="ATT"
-    unit="PITCH / ROLL"
+    :unit="unitLabel"
     :label="ariaLabel"
   >
     <svg viewBox="0 0 320 320" aria-hidden="true">
@@ -215,7 +225,7 @@ const ariaLabel = computed(
         />
         <text x="98" y="283" class="data-label" text-anchor="middle">PITCH</text>
         <text x="98" y="299" class="data-value" text-anchor="middle">
-          {{ formatSigned(store.display.pitch, 1) }}°
+          {{ formatSigned(pitch, 1) }}°
         </text>
       </g>
       <g>
@@ -230,7 +240,7 @@ const ariaLabel = computed(
         />
         <text x="222" y="283" class="data-label" text-anchor="middle">ROLL</text>
         <text x="222" y="299" class="data-value" text-anchor="middle">
-          {{ formatSigned(store.display.roll, 1) }}°
+          {{ formatSigned(roll, 1) }}°
         </text>
       </g>
 
