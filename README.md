@@ -83,6 +83,26 @@ Optional server settings are documented in `.env.example`:
 `ADSB_CACHE_TTL_MS`, `ADSB_REQUEST_TIMEOUT_MS`, `ADSB_UPSTREAM_INTERVAL_MS`, and
 `ADSB_USER_AGENT`.
 
+## Vercel Deployment
+
+Deploy this repository as a Vite project. `vercel.json` configures the production
+build and a 30-second function limit. `api/adsb/[...path].js` exposes the same
+ADS-B proxy used locally at `/api/adsb/nearby` and `/api/adsb/aircraft/:icao24`.
+Upload or push the complete source, including `api/`, `server/`, and
+`vercel.json`; deploying only `dist/` does not deploy the live-data API.
+
+After redeploying, open **Live aircraft**, set a location, and select an aircraft.
+Check `/api/adsb/nearby?lat=13.69&lon=100.75&radius=50` on your deployment: it
+should return JSON containing `aircraft`, `provider`, and `fetchedAt`. Provider
+coverage and availability still apply. `ADSB_*` environment settings are optional
+and can be set in Vercel's project settings.
+
+ASI, ALT, HDG, and VSI use the available aircraft feed fields. ATT uses estimated
+attitude; TC uses available or derived bank/turn rate, while slip/skid remains
+unavailable. Phone tilt does not provide real aircraft speed or altitude.
+Vercel function instances have independent caches and request queues, so the
+proxy's local throttling is not a global provider rate limit across instances.
+
 ## Tests
 
 ```bash
@@ -96,6 +116,16 @@ npm run test:watch
 ```
 
 ## Flight Controls
+
+The navigation bar has **ALL**, **ASI**, **ATT**, **ALT**, **TC**, **HDG**, and
+**VSI** buttons. **ALL** shows the six-instrument cockpit; each other button
+shows one enlarged instrument. Switching views preserves simulation values,
+device/keyboard control, and the selected live aircraft.
+
+The **Controls** button opens or collapses the control panel. It starts collapsed
+on phones and tablets to give the instruments more space. In a focused view,
+the simulation sliders are filtered to the selected instrument. **Live aircraft**
+opens the aircraft picker from any view. Navigation stays visible while scrolling.
 
 The control panel accepts target values for:
 

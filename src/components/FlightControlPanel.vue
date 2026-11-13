@@ -13,11 +13,17 @@ import ControlField from '@/components/ui/ControlField.vue'
 import AttitudeControls from '@/components/AttitudeControls.vue'
 import { useFlightStore } from '@/stores/flightStore'
 import { useLiveTrackingStore } from '@/stores/liveTrackingStore'
+import { useDashboardStore } from '@/stores/dashboardStore'
 import type { FlightKey, FlightPreset } from '@/types/flight'
 
 const store = useFlightStore()
 const live = useLiveTrackingStore()
+const dashboard = useDashboardStore()
 const isLive = computed(() => store.mode === 'live')
+const visibleControls = computed(() => {
+  const keys: readonly FlightKey[] | undefined = dashboard.selected?.controls
+  return keys ? store.controls.filter(control => keys.includes(control.key)) : store.controls
+})
 
 const presets: Array<{ id: FlightPreset; label: string }> = [
   { id: 'level', label: 'Level' },
@@ -193,7 +199,7 @@ function applyPreset(preset: FlightPreset): void {
 
       <div class="control-panel__fields">
         <ControlField
-          v-for="control in store.controls"
+          v-for="control in visibleControls"
           :key="control.key"
           :control="control"
           :model-value="store.target[control.key]"
@@ -554,10 +560,7 @@ function applyPreset(preset: FlightPreset): void {
 
 @media (min-width: 1200px) {
   .control-panel {
-    position: sticky;
-    top: 16px;
-    max-height: calc(100svh - 132px);
-    overflow-y: auto;
+    position: relative;
   }
 }
 
