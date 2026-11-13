@@ -4,12 +4,10 @@ import DashboardHeader from '@/components/DashboardHeader.vue'
 import FlightControlPanel from '@/components/FlightControlPanel.vue'
 import LiveFlightPicker from '@/components/LiveFlightPicker.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
-import AirspeedIndicator from '@/components/instruments/AirspeedIndicator.vue'
-import AttitudeIndicator from '@/components/instruments/AttitudeIndicator.vue'
-import Altimeter from '@/components/instruments/Altimeter.vue'
-import VerticalSpeedIndicator from '@/components/instruments/VerticalSpeedIndicator.vue'
-import HeadingIndicator from '@/components/instruments/HeadingIndicator.vue'
-import TurnCoordinator from '@/components/instruments/TurnCoordinator.vue'
+import InstrumentNavigation from '@/components/InstrumentNavigation.vue'
+import InstrumentDisplay from '@/components/InstrumentDisplay.vue'
+import { useDashboardStore } from '@/stores/dashboardStore'
+import { SlidersHorizontal, RadioTower, ChevronDown } from '@lucide/vue'
 import { useSimulationLoop } from '@/composables/useSimulationLoop'
 import { useFlightStore } from '@/stores/flightStore'
 import { useLiveTrackingStore } from '@/stores/liveTrackingStore'
@@ -17,6 +15,8 @@ import { useLiveTrackingStore } from '@/stores/liveTrackingStore'
 const settingsOpen = ref(false)
 const store = useFlightStore()
 const live = useLiveTrackingStore()
+const dashboard = useDashboardStore()
+const controlsOpen = ref(typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(min-width: 1024px)').matches)
 
 useSimulationLoop()
 </script>
@@ -24,18 +24,30 @@ useSimulationLoop()
 <template>
   <div class="app-shell">
     <DashboardHeader @open-settings="settingsOpen = true" />
+    <InstrumentNavigation />
 
-    <main class="dashboard">
-      <div class="instrument-grid" aria-label="Flight instruments">
-        <AirspeedIndicator />
-        <AttitudeIndicator />
-        <Altimeter />
-        <TurnCoordinator />
-        <HeadingIndicator />
-        <VerticalSpeedIndicator />
+    <div class="view-toolbar">
+      <div>
+        <p class="view-toolbar__eyebrow">{{ dashboard.view === 'ALL' ? 'COCKPIT OVERVIEW' : `${dashboard.view} / FOCUSED VIEW` }}</p>
+        <h2 aria-live="polite">{{ dashboard.title }}</h2>
       </div>
+      <div class="view-toolbar__actions">
+        <button type="button" class="toolbar-button toolbar-button--live" @click="live.openPicker()">
+          <RadioTower :size="16" aria-hidden="true" /><span>Live aircraft</span>
+        </button>
+        <button type="button" class="toolbar-button" aria-controls="flight-controls"
+          :aria-expanded="controlsOpen" @click="controlsOpen = !controlsOpen">
+          <SlidersHorizontal :size="16" aria-hidden="true" /><span>Controls</span>
+          <ChevronDown :size="14" :class="{ 'chevron-open': controlsOpen }" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
 
-      <FlightControlPanel />
+    <main class="dashboard" :class="{ 'dashboard--expanded': !controlsOpen }">
+      <InstrumentDisplay />
+      <div id="flight-controls" v-show="controlsOpen" class="controls-wrapper">
+        <FlightControlPanel />
+      </div>
     </main>
 
     <footer class="app-footer">
@@ -85,11 +97,28 @@ useSimulationLoop()
   min-width: 0;
 }
 
-.instrument-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  min-width: 0;
+.dashboard--expanded { grid-template-columns: minmax(0, 1fr); }
+.controls-wrapper { min-width: 0; }
+.view-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 2px 4px;
+}
+.view-toolbar h2 { font-size: clamp(17px, 2vw, 23px); font-weight: 600; letter-spacing: -0.02em; }
+.view-toolbar__eyebrow {
+  margin-bottom: 4px; color: var(--muted); font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.14em;
+}
+.view-toolbar__actions { display: flex; gap: 8px; flex: none; }
+.toolbar-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 44px; padding: 8px 12px; border: 1px solid var(--line);
+  border-radius: 9px; background: #0a1a28; color: var(--cyan-soft); font-size: 12px;
+}
+.toolbar-button:hover { border-color: var(--cyan); }
+.toolbar-button--live { background: rgba(60, 232, 255, 0.07); }
+.chevron-open { transform: rotate(180deg); }
+@media (min-width: 1024px) {
+  .controls-wrapper { position: sticky; top: 88px; max-height: calc(100svh - 104px); overflow-y: auto; scrollbar-width: thin; }
 }
 
 .app-footer {
@@ -125,15 +154,9 @@ useSimulationLoop()
   flex: none;
 }
 
-@media (max-width: 1199px) {
+@media (max-width: 1023px) {
   .dashboard {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 900px) {
-  .instrument-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -147,10 +170,9 @@ useSimulationLoop()
     gap: 10px;
   }
 
-  .instrument-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
+  .view-toolbar { flex-wrap: wrap; }
+  .view-toolbar__actions { width: 100%; }
+  .toolbar-button { flex: 1; }
 
   .app-footer {
     flex-direction: column;

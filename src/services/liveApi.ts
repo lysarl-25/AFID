@@ -25,6 +25,11 @@ async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
     throw new Error(message)
   }
 
+  if (!payload || typeof payload !== 'object' || !('aircraft' in payload) ||
+      !('provider' in payload) || !('fetchedAt' in payload)) {
+    throw new Error('Live data API is unavailable. Check that the ADS-B server is deployed with this site.')
+  }
+
   return payload as T
 }
 

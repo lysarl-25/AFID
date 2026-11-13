@@ -347,7 +347,7 @@ const statusText = computed(() => {
   }
 
   .brand__title {
-    font-size: 12px;
+    font-size: clamp(10px, 2.7vw, 12px);
     letter-spacing: 0.07em;
   }
 
@@ -363,5 +363,13 @@ const statusText = computed(() => {
   .status-pill {
     font-size: 7px;
   }
+}
+
+@media (max-width: 400px) {
+  .brand__mark { display: none; }
+  .header-actions { gap: 4px; }
+  .header-button { width: 38px; height: 44px; }
+  .dashboard-header { column-gap: 6px; }
+  .brand__title { white-space: normal; max-width: 150px; }
 }
 </style>

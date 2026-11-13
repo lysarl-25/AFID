@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { useFlightStore } from '@/stores/flightStore'
+import { useAttitudeControlStore } from '@/stores/attitudeControlStore'
 
 const store = useFlightStore()
+const attitude = useAttitudeControlStore()
 
 withDefaults(
   defineProps<{
@@ -38,7 +40,7 @@ withDefaults(
       :class="{ 'instrument__sim--live': store.mode === 'live' }"
       aria-hidden="true"
     >
-      {{ store.mode === 'live' ? 'LIVE' : 'SIM' }}
+      {{ code === 'ATT' && attitude.active ? attitude.modeLabel : store.mode === 'live' ? 'LIVE' : 'SIM' }}
     </span>
   </section>
 </template>
