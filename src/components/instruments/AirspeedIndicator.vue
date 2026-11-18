@@ -1,244 +1,158 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import InstrumentFrame from '@/components/ui/InstrumentFrame.vue'
 import { useFlightStore } from '@/stores/flightStore'
-import { buildTapeTicks } from '@/utils/svg'
-import { formatNumber } from '@/utils/format'
-
-const SCALE = 2.4
-const CENTER_Y = 160
-const TICK_X = 192
+import { describeArc, polarToCartesian } from '@/utils/svg'
 
 const store = useFlightStore()
+const id = `asi-${useId().replace(/:/g, '')}`
+const center = 160
+const scaleMax = computed(() => store.profile.airspeed.max)
 
-const ticks = computed(() =>
-  buildTapeTicks(
-    store.profile.airspeed.min,
-    store.profile.airspeed.max,
-    10,
-    20,
-    CENTER_Y,
-    SCALE,
-  ),
-)
+// Compress the low-speed region to leave the operating range around the dial.
+function speedAngle(speed: number) {
+  const fraction = Math.max(0, Math.min(speed / scaleMax.value, 1))
+  return fraction <= 0.2 ? fraction * 180 : 36 + ((fraction - 0.2) / 0.8) * 276
+}
 
-const bands = computed(() => {
-  const aircraft = store.profile.airspeed
-  const segments = [
-    {
-      from: aircraft.bands.white[0],
-      to: aircraft.bands.white[1],
-      color: '#dceeff',
-    },
-    {
-      from: aircraft.bands.green[0],
-      to: aircraft.bands.green[1],
-      color: '#3df59a',
-    },
-    {
-      from: aircraft.bands.amber[0],
-      to: aircraft.bands.amber[1],
-      color: '#ffc247',
-    },
-    {
-      from: aircraft.bands.redline,
-      to: aircraft.max,
-      color: '#ff5d6c',
-    },
-  ]
-
-  return segments
-    .filter((segment) => segment.to > segment.from)
-    .map((segment) => ({
-      ...segment,
-      y: CENTER_Y - segment.to * SCALE,
-      height: (segment.to - segment.from) * SCALE,
-    }))
+const labelStep = computed(() => scaleMax.value <= 200 ? 20 : 50)
+const ticks = computed(() => {
+  const step = labelStep.value / 4
+  const result = []
+  for (let value = labelStep.value; value <= scaleMax.value; value += step) {
+    if (value < scaleMax.value * 0.18) continue
+    const major = value % labelStep.value === 0
+    const medium = value % (labelStep.value / 2) === 0
+    const angle = speedAngle(value)
+    result.push({
+      value, major,
+      outer: polarToCartesian(center, center, 125, angle),
+      inner: polarToCartesian(center, center, major ? 92 : medium ? 99 : 106, angle),
+      label: polarToCartesian(center, center, 80, angle),
+    })
+  }
+  return result
 })
 
-const tapeOffset = computed(() => store.display.airspeed * SCALE)
-const readout = computed(() => Math.round(store.display.airspeed))
-
-const sourceLabel = computed(() =>
-  store.mode === 'live' ? store.liveMeta.airspeedKind : 'IAS',
-)
-
-const readoutLabel = computed(() =>
-  store.mode === 'live' ? store.liveMeta.airspeedKind : 'KNOTS',
-)
-
-const ariaLabel = computed(() => {
-  if (store.mode === 'live') {
-    const kind =
-      store.liveMeta.airspeedKind === 'GS'
-        ? 'Ground speed'
-        : store.liveMeta.airspeedKind === 'IAS'
-          ? 'Indicated airspeed'
-          : 'True airspeed'
-    return `Airspeed indicator. ${kind} ${readout.value} knots, from live ADS-B data.`
+const bands = computed(() => {
+  const { white, green, amber } = store.profile.airspeed.bands
+  return [
+    { name: 'white', range: white, radius: 112, width: 13, color: '#fafafa' },
+    { name: 'green', range: green, radius: 99, width: 13, color: '#00ce00' },
+    { name: 'amber', range: amber, radius: 99, width: 13, color: '#f4f000' },
+  ].filter(({ range }) => range[1] > range[0]).map((band) => ({
+    ...band,
+    path: describeArc(center, center, band.radius, speedAngle(band.range[0]), speedAngle(band.range[1])),
+  }))
+})
+const redline = computed(() => {
+  const angle = speedAngle(store.profile.airspeed.bands.redline)
+  return {
+    inner: polarToCartesian(center, center, 92, angle),
+    outer: polarToCartesian(center, center, 125, angle),
   }
-  return `Airspeed indicator. Indicated airspeed ${readout.value} knots.`
+})
+const needleTransform = computed(() => `rotate(${speedAngle(store.display.airspeed)} 160 160)`)
+const sourceLabel = computed(() => store.mode === 'live' ? store.liveMeta.airspeedKind : '')
+const ariaLabel = computed(() => {
+  const kind = store.mode === 'live'
+    ? store.liveMeta.airspeedKind === 'GS' ? 'Ground speed'
+      : store.liveMeta.airspeedKind === 'IAS' ? 'Indicated airspeed' : 'True airspeed'
+    : 'Indicated airspeed'
+  return `Airspeed indicator. ${kind} ${Math.round(store.display.airspeed)} knots${store.mode === 'live' ? ', from live ADS-B data' : ''}.`
 })
 </script>
 
 <template>
-  <InstrumentFrame
-    title="Airspeed Indicator"
-    code="ASI"
-    unit="KTS"
-    :label="ariaLabel"
-  >
-    <svg viewBox="0 0 320 320" aria-hidden="true">
+  <InstrumentFrame title="Airspeed Indicator" code="ASI" unit="KTS" :label="ariaLabel">
+    <svg class="airspeed-dial" viewBox="0 0 320 320" aria-hidden="true">
       <defs>
-        <clipPath id="asi-tape-clip">
-          <rect x="54" y="16" width="212" height="288" rx="24" />
-        </clipPath>
-        <linearGradient id="asi-fade-top" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#06101b" stop-opacity="1" />
-          <stop offset="1" stop-color="#06101b" stop-opacity="0" />
+        <linearGradient :id="`${id}-bezel`" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#555555" />
+          <stop offset="0.28" stop-color="#171717" />
+          <stop offset="0.7" stop-color="#535353" />
+          <stop offset="1" stop-color="#303030" />
         </linearGradient>
-        <linearGradient id="asi-fade-bottom" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="#06101b" stop-opacity="1" />
-          <stop offset="1" stop-color="#06101b" stop-opacity="0" />
+        <linearGradient :id="`${id}-rim`" x1="0" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stop-color="#101010" />
+          <stop offset="0.52" stop-color="#2b2b2b" />
+          <stop offset="1" stop-color="#606060" />
+        </linearGradient>
+        <radialGradient :id="`${id}-face`" cx="50%" cy="48%" r="55%">
+          <stop offset="0" stop-color="#202020" />
+          <stop offset="0.8" stop-color="#202020" />
+          <stop offset="1" stop-color="#101010" />
+        </radialGradient>
+        <linearGradient :id="`${id}-needle`" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#c9c9c9" />
+          <stop offset="0.5" stop-color="#ffffff" />
+          <stop offset="1" stop-color="#dedede" />
         </linearGradient>
       </defs>
 
-      <rect
-        x="18"
-        y="9"
-        width="284"
-        height="302"
-        rx="30"
-        fill="#050d16"
-        stroke="rgba(93, 215, 255, 0.14)"
-      />
-      <rect
-        x="54"
-        y="16"
-        width="212"
-        height="288"
-        rx="24"
-        fill="#07111c"
-        stroke="rgba(141, 188, 216, 0.08)"
-      />
+      <circle cx="160" cy="160" r="151" :fill="`url(#${id}-bezel)`" stroke="#333333" stroke-width="1.5" />
+      <circle cx="160" cy="160" r="145" :fill="`url(#${id}-rim)`" />
+      <circle cx="160" cy="160" r="126" :fill="`url(#${id}-face)`" />
 
-      <g clip-path="url(#asi-tape-clip)">
-        <g :transform="`translate(0 ${tapeOffset})`">
-          <g v-if="store.mode === 'simulation'">
-            <rect
-              v-for="band in bands"
-              :key="`${band.from}-${band.to}`"
-              x="198"
-              :y="band.y"
-              width="9"
-              :height="band.height"
-              :fill="band.color"
-              opacity="0.82"
-            />
-          </g>
-
-          <g v-for="tick in ticks" :key="tick.value">
-            <line
-              :x1="TICK_X - (tick.major ? 17 : 9)"
-              :x2="TICK_X"
-              :y1="tick.y"
-              :y2="tick.y"
-              :stroke="tick.major ? 'rgba(233, 245, 255, 0.82)' : 'rgba(141, 188, 216, 0.38)'"
-              :stroke-width="tick.major ? 1.4 : 0.8"
-            />
-            <text
-              v-if="tick.major"
-              :x="TICK_X - 23"
-              :y="tick.y + 3.5"
-              class="tape-label"
-              text-anchor="end"
-            >
-              {{ tick.value }}
-            </text>
-          </g>
-
-          <line
-            v-if="store.mode === 'simulation'"
-            :x1="206"
-            :x2="228"
-            :y1="CENTER_Y - store.profile.airspeed.bands.redline * SCALE"
-            :y2="CENTER_Y - store.profile.airspeed.bands.redline * SCALE"
-            stroke="#ff5d6c"
-            stroke-width="2"
-          />
-        </g>
-
-        <rect x="54" y="16" width="212" height="44" fill="url(#asi-fade-top)" />
-        <rect x="54" y="260" width="212" height="44" fill="url(#asi-fade-bottom)" />
+      <g v-if="store.mode === 'simulation'" fill="none">
+        <path v-for="band in bands" :key="band.name" :d="band.path" :stroke="band.color" :stroke-width="band.width" />
       </g>
-
-      <text x="62" y="32" class="tape-caption">{{ sourceLabel }}</text>
-      <text x="216" y="32" class="tape-caption" text-anchor="end">×100</text>
-
-      <path
-        d="M258 151 L245 160 L258 169 Z"
-        fill="#ffc247"
-        stroke="#06101b"
-        stroke-width="1.2"
-      />
-
-      <g>
-        <rect
-          x="82"
-          y="133"
-          width="156"
-          height="54"
-          rx="9"
-          fill="rgba(2, 8, 15, 0.94)"
-          stroke="rgba(60, 232, 255, 0.48)"
-          stroke-width="1.2"
-        />
-        <text x="160" y="165" class="readout-value" text-anchor="middle">
-          {{ formatNumber(readout) }}
-        </text>
-        <text x="160" y="178" class="readout-unit" text-anchor="middle">
-          {{ readoutLabel }}
-        </text>
+      <g class="dial-ticks">
+        <line v-for="tick in ticks" :key="tick.value"
+          :x1="tick.inner.x" :y1="tick.inner.y" :x2="tick.outer.x" :y2="tick.outer.y"
+          :stroke-width="tick.major ? 2.6 : 1.25" :opacity="tick.major ? 1 : 0.8" />
       </g>
+      <line v-if="store.mode === 'simulation'"
+        :x1="redline.inner.x" :y1="redline.inner.y" :x2="redline.outer.x" :y2="redline.outer.y"
+        stroke="#ff0808" stroke-width="2.8" />
 
-      <text x="62" y="292" class="tape-caption">
-        {{ store.mode === 'live' ? 'ADS-B' : 'SIM INPUT' }}
-      </text>
-      <text x="258" y="292" class="tape-caption" text-anchor="end">
-        {{ store.profile.shortName }}
-      </text>
+      <g class="dial-numbers" text-anchor="middle" dominant-baseline="central">
+        <template v-for="tick in ticks" :key="tick.value">
+          <text v-if="tick.major" :x="tick.label.x" :y="tick.label.y">{{ tick.value }}</text>
+        </template>
+      </g>
+      <text x="160" y="64" class="dial-title" text-anchor="middle">AIRSPEED</text>
+      <text x="160" y="201" class="dial-unit" text-anchor="middle">KNOTS</text>
+      <text v-if="sourceLabel" x="160" y="218" class="dial-source" text-anchor="middle">{{ sourceLabel }}</text>
+
+      <g :transform="needleTransform">
+        <path d="M156 148 L156 89 L158.5 85 L158.5 47 L160 42 L161.5 47 L161.5 85 L164 89 L164 148 Z"
+          :fill="`url(#${id}-needle)`" stroke="#aaaaaa" stroke-width="0.35" />
+        <path d="M156 148 H164 V197 A9.5 9.5 0 1 1 156 197 Z" fill="#202020" stroke="#343434" stroke-width="0.45" />
+        <circle cx="160" cy="160" r="5.5" fill="#202020" stroke="#343434" stroke-width="0.45" />
+        <path d="M156 160 V198 M164 160 V198" stroke="#343434" stroke-width="0.45" />
+        <circle cx="160" cy="160" r="0.8" fill="#383838" />
+      </g>
     </svg>
   </InstrumentFrame>
 </template>
 
 <style scoped lang="scss">
-.tape-label {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-  fill: rgba(233, 245, 255, 0.78);
+.airspeed-dial {
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-.tape-caption {
-  font-family: var(--font-mono);
+.dial-ticks {
+  stroke: #f5f5f5;
+}
+
+.dial-numbers {
+  fill: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dial-title,
+.dial-unit {
+  fill: #fafafa;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.dial-source {
+  fill: #bdbdbd;
   font-size: 8px;
   letter-spacing: 0.12em;
-  fill: rgba(125, 149, 171, 0.68);
-}
-
-.readout-value {
-  font-family: var(--font-mono);
-  font-size: 29px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  fill: var(--white);
-  letter-spacing: 0.02em;
-}
-
-.readout-unit {
-  font-family: var(--font-mono);
-  font-size: 7.5px;
-  letter-spacing: 0.24em;
-  fill: var(--cyan);
 }
 </style>
