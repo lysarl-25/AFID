@@ -131,7 +131,8 @@ withDefaults(
 
 .instrument__body {
   position: relative;
-  flex: 1;
+  // Preserve the explicit overview height and the focused view's aspect ratio.
+  flex: 0 0 auto;
   width: 100%;
   min-height: 0;
   aspect-ratio: 1.14 / 1;

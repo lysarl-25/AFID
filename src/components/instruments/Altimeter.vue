@@ -1,46 +1,47 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import InstrumentFrame from '@/components/ui/InstrumentFrame.vue'
 import { useFlightStore } from '@/stores/flightStore'
-import { buildTapeTicks } from '@/utils/svg'
+import { polarToCartesian } from '@/utils/svg'
 import { formatNumber } from '@/utils/format'
 
-const SCALE = 0.08
-const CENTER_Y = 160
-const TICK_X = 202
-
 const store = useFlightStore()
-
-const ticks = computed(() =>
-  buildTapeTicks(
-    store.profile.altitude.min,
-    store.profile.altitude.max,
-    100,
-    1000,
-    CENTER_Y,
-    SCALE,
-  ),
-)
-
-const tapeOffset = computed(() => store.display.altitude * SCALE)
+const id = `alt-${useId().replace(/:/g, '')}`
 const readout = computed(() => Math.round(store.display.altitude / 10) * 10)
 
-const unitLabel = computed(() => {
-  if (store.mode !== 'live') return 'FT'
-  return store.liveMeta.altitudeKind === 'GNSS' ? 'FT GNSS' : 'FT STD'
-})
-
-const baroValue = computed(() => {
-  if (store.mode !== 'live') return `${store.baro.toFixed(2)} IN`
-  return store.liveMeta.altitudeKind === 'GNSS' ? 'GNSS' : 'STD 29.92'
-})
-
+// Continuous angles keep the hands moving clockwise through each revolution.
+// One turn represents 1,000 / 10,000 / 100,000 feet respectively.
+const hundredsAngle = computed(() => store.display.altitude * 0.36)
+const thousandsAngle = computed(() => store.display.altitude * 0.036)
+const tenThousandsAngle = computed(() => store.display.altitude * 0.0036)
+const ticks = Array.from({ length: 50 }, (_, index) => ({
+  index,
+  major: index % 5 === 0,
+  outer: polarToCartesian(160, 160, 129, index * 7.2),
+  inner: polarToCartesian(160, 160, index % 5 === 0 ? 109 : 117, index * 7.2),
+}))
+const numerals = Array.from({ length: 10 }, (_, value) => ({
+  value,
+  position: polarToCartesian(160, 160, 94, value * 36),
+}))
+const screws = [{ x: 28, y: 28 }, { x: 292, y: 28 }, { x: 28, y: 292 }, { x: 292, y: 292 }]
+const pressureTicks = Array.from({ length: 21 }, (_, index) => ({
+  index,
+  y: 146 + index * 1.4,
+  length: index % 10 === 0 ? 11 : index % 5 === 0 ? 8 : 5,
+}))
+const isGnss = computed(() => store.mode === 'live' && store.liveMeta.altitudeKind === 'GNSS')
+const pressure = computed(() => store.mode === 'live' ? 29.92 : store.baro)
+const pressureLabels = computed(() => [-0.1, 0, 0.1].map(offset => ({
+  inches: (pressure.value + offset).toFixed(1),
+  hpa: Math.round((pressure.value + offset) * 33.8639),
+})))
+const unitLabel = computed(() => store.mode !== 'live' ? 'FT' : isGnss.value ? 'FT GNSS' : 'FT STD')
+const baroValue = computed(() => isGnss.value ? 'GNSS / ADS-B'
+  : store.mode === 'live' ? 'STD 29.92 IN' : `BARO ${store.baro.toFixed(2)} IN`)
 const ariaLabel = computed(() => {
   if (store.mode === 'live') {
-    const source =
-      store.liveMeta.altitudeKind === 'GNSS'
-        ? 'GNSS altitude'
-        : 'pressure altitude with standard pressure setting'
+    const source = isGnss.value ? 'GNSS altitude' : 'pressure altitude with standard pressure setting'
     return `Altimeter. ${source} ${formatNumber(readout.value)} feet, from live ADS-B data.`
   }
   return `Altimeter. Altitude ${formatNumber(readout.value)} feet. Barometric setting ${store.baro.toFixed(2)} inches of mercury.`
@@ -48,169 +49,106 @@ const ariaLabel = computed(() => {
 </script>
 
 <template>
-  <InstrumentFrame
-    title="Altimeter"
-    code="ALT"
-    :unit="unitLabel"
-    :label="ariaLabel"
-  >
-    <svg viewBox="0 0 320 320" aria-hidden="true">
+  <InstrumentFrame title="Altimeter" code="ALT" :unit="unitLabel" :label="ariaLabel">
+    <svg class="altimeter-dial" viewBox="0 0 320 320" aria-hidden="true">
       <defs>
-        <clipPath id="alt-tape-clip">
-          <rect x="62" y="16" width="196" height="288" rx="24" />
-        </clipPath>
-        <linearGradient id="alt-fade-top" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#06101b" stop-opacity="1" />
-          <stop offset="1" stop-color="#06101b" stop-opacity="0" />
+        <linearGradient :id="`${id}-housing`" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#3d3d3d" />
+          <stop offset="0.45" stop-color="#151515" />
+          <stop offset="1" stop-color="#303030" />
         </linearGradient>
-        <linearGradient id="alt-fade-bottom" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="#06101b" stop-opacity="1" />
-          <stop offset="1" stop-color="#06101b" stop-opacity="0" />
+        <linearGradient :id="`${id}-rim`" x1="0" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stop-color="#484848" />
+          <stop offset="0.45" stop-color="#242424" />
+          <stop offset="1" stop-color="#090909" />
+        </linearGradient>
+        <radialGradient :id="`${id}-face`" cx="48%" cy="42%" r="60%">
+          <stop offset="0" stop-color="#242424" />
+          <stop offset="0.8" stop-color="#191919" />
+          <stop offset="1" stop-color="#080808" />
+        </radialGradient>
+        <linearGradient :id="`${id}-hand`" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#d4d4d4" />
+          <stop offset="0.5" stop-color="#ffffff" />
+          <stop offset="1" stop-color="#eeeeee" />
         </linearGradient>
       </defs>
 
-      <rect
-        x="18"
-        y="9"
-        width="284"
-        height="302"
-        rx="30"
-        fill="#050d16"
-        stroke="rgba(93, 215, 255, 0.14)"
-      />
-      <rect
-        x="62"
-        y="16"
-        width="196"
-        height="288"
-        rx="24"
-        fill="#07111c"
-        stroke="rgba(141, 188, 216, 0.08)"
-      />
+      <path d="M52 5 Q160 -5 268 5 Q303 8 311 44 Q325 160 311 276 Q307 307 276 313 Q160 325 44 313 Q13 307 9 276 Q-5 160 9 44 Q17 8 52 5Z"
+        :fill="`url(#${id}-housing)`" stroke="#080808" stroke-width="3" />
+      <g v-for="screw in screws" :key="`${screw.x}-${screw.y}`" :transform="`translate(${screw.x} ${screw.y})`">
+        <circle r="13" fill="#303030" stroke="#080808" stroke-width="2" />
+        <path d="M-4 -6 H4 L8 0 L4 6 H-4 L-8 0Z" fill="#151515" stroke="#080808" stroke-width="1.5" />
+      </g>
+      <circle cx="160" cy="160" r="150" fill="#080808" stroke="#111" stroke-width="2" />
+      <circle cx="160" cy="160" r="146" :fill="`url(#${id}-rim)`" />
+      <circle cx="160" cy="160" r="135" :fill="`url(#${id}-face)`" stroke="#080808" stroke-width="2" />
 
-      <g clip-path="url(#alt-tape-clip)">
-        <g :transform="`translate(0 ${tapeOffset})`">
-          <g v-for="tick in ticks" :key="tick.value">
-            <line
-              :x1="TICK_X - (tick.major ? 18 : 8)"
-              :x2="TICK_X"
-              :y1="tick.y"
-              :y2="tick.y"
-              :stroke="tick.major ? 'rgba(233, 245, 255, 0.78)' : 'rgba(141, 188, 216, 0.32)'"
-              :stroke-width="tick.major ? 1.3 : 0.75"
-            />
-            <text
-              v-if="tick.major"
-              :x="TICK_X + 13"
-              :y="tick.y + 3.6"
-              class="tape-label"
-            >
-              {{ formatNumber(tick.value) }}
-            </text>
-          </g>
+      <g stroke="#fafafa">
+        <line v-for="tick in ticks" :key="tick.index"
+          :x1="tick.inner.x" :y1="tick.inner.y" :x2="tick.outer.x" :y2="tick.outer.y"
+          :stroke-width="tick.major ? 6 : 2.6" />
+      </g>
+      <g class="dial-numerals" text-anchor="middle" dominant-baseline="central">
+        <text v-for="numeral in numerals" :key="numeral.value"
+          :x="numeral.position.x" :y="numeral.position.y">{{ numeral.value }}</text>
+      </g>
+
+      <text x="160" y="116" class="dial-title" text-anchor="middle">ALTITUDE</text>
+      <text x="160" y="132" class="dial-unit" text-anchor="middle">FEET</text>
+      <text x="160" y="145" class="hand-legend" text-anchor="middle">100 / 1,000 / 10,000</text>
+
+      <g v-if="!isGnss" class="pressure-scale">
+        <g stroke="#e7e7e7" stroke-width="1">
+          <template v-for="tick in pressureTicks" :key="tick.index">
+            <line :x1="57" :x2="57 + tick.length" :y1="tick.y" :y2="tick.y" />
+            <line :x1="263 - tick.length" :x2="263" :y1="tick.y" :y2="tick.y" />
+          </template>
         </g>
-
-        <rect x="62" y="16" width="196" height="44" fill="url(#alt-fade-top)" />
-        <rect x="62" y="260" width="196" height="44" fill="url(#alt-fade-bottom)" />
+        <g v-for="(label, index) in pressureLabels" :key="index" class="pressure-numbers">
+          <text x="71" :y="149 + index * 14">{{ label.hpa }}</text>
+          <text x="249" :y="149 + index * 14" text-anchor="end">{{ label.inches }}</text>
+        </g>
+        <text x="100" y="189" class="pressure-unit">hPa</text>
+        <text x="220" y="189" class="pressure-unit" text-anchor="end">inHg</text>
+        <path d="M52 157 L57 160 L52 163 M268 157 L263 160 L268 163" fill="none" stroke="#fff" stroke-width="1.5" />
       </g>
 
-      <text x="70" y="32" class="tape-caption">ALT</text>
-      <text x="250" y="32" class="tape-caption" text-anchor="end">FEET</text>
+      <rect x="117" y="211" width="86" height="23" rx="3" fill="#090909" stroke="#515151" />
+      <text x="160" y="228" class="altitude-readout" text-anchor="middle">{{ formatNumber(readout) }}</text>
+      <text x="160" y="206" class="baro-readout" text-anchor="middle">{{ baroValue }}</text>
 
-      <path
-        d="M58 151 L71 160 L58 169 Z"
-        fill="#3ce8ff"
-        stroke="#06101b"
-        stroke-width="1.2"
-      />
-
-      <g>
-        <rect
-          x="72"
-          y="128"
-          width="176"
-          height="60"
-          rx="9"
-          fill="rgba(2, 8, 15, 0.95)"
-          stroke="rgba(60, 232, 255, 0.46)"
-          stroke-width="1.2"
-        />
-        <text x="160" y="162" class="readout-value" text-anchor="middle">
-          {{ formatNumber(readout) }}
-        </text>
-        <text x="160" y="177" class="readout-unit" text-anchor="middle">
-          FEET
-        </text>
+      <g class="ten-thousands-hand" :transform="`rotate(${tenThousandsAngle} 160 160)`">
+        <path d="M157.5 160 V58 H162.5 V160Z" fill="#929292" />
+        <path d="M160 35 L151 57 H169Z" fill="#1b1b1b" stroke="#ededed" stroke-width="2" />
       </g>
-
-      <g>
-        <rect
-          x="84"
-          y="253"
-          width="152"
-          height="29"
-          rx="7"
-          fill="rgba(2, 8, 15, 0.94)"
-          stroke="rgba(141, 188, 216, 0.18)"
-        />
-        <text x="96" y="271" class="baro-label">BARO</text>
-        <text x="224" y="271" class="baro-value" text-anchor="end">
-          {{ baroValue }}
-        </text>
+      <g class="thousands-hand" :transform="`rotate(${thousandsAngle} 160 160)`">
+        <path d="M156 162 L150 114 L160 79 L170 114 L164 162Z" :fill="`url(#${id}-hand)`" />
+        <path d="M156 158 H164 L168 189 A8 8 0 1 1 152 189Z" fill="#080808" />
       </g>
-
-      <text x="70" y="292" class="tape-caption">
-        {{ store.mode === 'live' ? 'ADS-B' : 'SIM INPUT' }}
-      </text>
-      <text x="250" y="292" class="tape-caption" text-anchor="end">
-        {{ store.profile.shortName }}
-      </text>
+      <g class="hundreds-hand" :transform="`rotate(${hundredsAngle} 160 160)`">
+        <path d="M157 162 L156 65 L160 39 L164 65 L163 162Z" :fill="`url(#${id}-hand)`" />
+        <path d="M156 158 H164 L175 188 Q179 200 169 202 H151 Q141 200 145 188Z" fill="#080808" />
+      </g>
+      <circle cx="160" cy="160" r="12" fill="#080808" />
+      <circle cx="160" cy="160" r="7.5" fill="#303030" stroke="#191919" stroke-width="1" />
     </svg>
   </InstrumentFrame>
 </template>
 
 <style scoped lang="scss">
-.tape-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
+.altimeter-dial {
+  font-family: Arial, Helvetica, sans-serif;
+  fill: #f5f5f5;
   font-variant-numeric: tabular-nums;
-  fill: rgba(233, 245, 255, 0.76);
 }
 
-.tape-caption {
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.12em;
-  fill: rgba(125, 149, 171, 0.68);
-}
-
-.readout-value {
-  font-family: var(--font-mono);
-  font-size: 31px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  fill: var(--white);
-  letter-spacing: 0.01em;
-}
-
-.readout-unit {
-  font-family: var(--font-mono);
-  font-size: 7.5px;
-  letter-spacing: 0.24em;
-  fill: var(--cyan);
-}
-
-.baro-label {
-  font-family: var(--font-mono);
-  font-size: 7.5px;
-  letter-spacing: 0.16em;
-  fill: var(--muted);
-}
-
-.baro-value {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  fill: var(--cyan-soft);
-}
+.dial-numerals { font-size: 27px; font-weight: 400; }
+.dial-title { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+.dial-unit { font-size: 10px; letter-spacing: 1.5px; }
+.hand-legend { font-size: 6.5px; fill: #c4c4c4; }
+.pressure-numbers { font-size: 8px; }
+.pressure-unit { font-size: 6px; fill: #bdbdbd; }
+.altitude-readout { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }
+.baro-readout { font-size: 7px; letter-spacing: 0.3px; fill: #d0d0d0; }
 </style>

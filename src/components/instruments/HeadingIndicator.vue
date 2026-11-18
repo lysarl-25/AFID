@@ -1,59 +1,36 @@
-<script setup lang="ts">
-import { computed } from 'vue'
+﻿<script setup lang="ts">
+import { computed, useId } from 'vue'
 import InstrumentFrame from '@/components/ui/InstrumentFrame.vue'
 import { useFlightStore } from '@/stores/flightStore'
 import { polarToCartesian } from '@/utils/svg'
 import { formatHeading } from '@/utils/format'
 import { normalizeHeading } from '@/utils/math'
 
-const CENTER = 160
-
 const store = useFlightStore()
-
+const id = `hdg-${useId().replace(/:/g, '')}`
 const cardTicks = Array.from({ length: 72 }, (_, index) => {
   const angle = index * 5
-  const cardinal = angle % 45 === 0
-  const major = angle % 10 === 0
-  const outer = polarToCartesian(CENTER, CENTER, 122, angle)
-  const inner = polarToCartesian(
-    CENTER,
-    CENTER,
-    cardinal ? 102 : major ? 111 : 116,
-    angle,
-  )
-  return { angle, cardinal, major, outer, inner }
+  const major = angle % 30 === 0
+  return {
+    angle, major,
+    outer: polarToCartesian(160, 160, 121, angle),
+    inner: polarToCartesian(160, 160, major ? 107 : 113, angle),
+  }
 })
-
-const directionLabels = [
-  { angle: 0, label: 'N' },
-  { angle: 45, label: 'NE' },
-  { angle: 90, label: 'E' },
-  { angle: 135, label: 'SE' },
-  { angle: 180, label: 'S' },
-  { angle: 225, label: 'SW' },
-  { angle: 270, label: 'W' },
-  { angle: 315, label: 'NW' },
-]
-
-const degreeLabels = [30, 60, 120, 150, 210, 240, 300, 330].map((angle) => ({
-  angle,
-  label: String(angle).padStart(3, '0'),
+const cardLabels = Array.from({ length: 12 }, (_, index) => ({
+  angle: index * 30,
+  label: ['N', '3', '6', 'E', '12', '15', 'S', '21', '24', 'W', '30', '33'][index],
+  cardinal: index % 3 === 0,
 }))
-
-const cardTransform = computed(
-  () => `rotate(${-store.display.heading} ${CENTER} ${CENTER})`,
-)
-
+const screws = [{ x: 28, y: 29 }, { x: 292, y: 29 }, { x: 292, y: 291 }]
+// The card turns opposite the heading; the aircraft and top index stay fixed.
+// Keep the continuous store angle so crossing north does not reverse the card.
+const cardTransform = computed(() => `rotate(${-store.display.heading} 160 160)`)
 const headingText = computed(() => formatHeading(store.display.heading))
-
 const headingKind = computed(() =>
   store.mode === 'live' && store.liveMeta.headingKind === 'TRK' ? 'TRK' : 'MAG',
 )
-
-const headingLabel = computed(() =>
-  headingKind.value === 'TRK' ? 'TRACK' : 'MAG HDG',
-)
-
+const headingLabel = computed(() => headingKind.value === 'TRK' ? 'TRACK' : 'MAG HDG')
 const ariaLabel = computed(() => {
   const kind = headingKind.value === 'TRK' ? 'track' : 'magnetic heading'
   const suffix = store.mode === 'live' ? ', from live ADS-B data' : ''
@@ -62,177 +39,86 @@ const ariaLabel = computed(() => {
 </script>
 
 <template>
-  <InstrumentFrame
-    title="Heading Indicator"
-    code="HDG"
-    :unit="headingKind"
-    :label="ariaLabel"
-  >
-    <svg viewBox="0 0 320 320" aria-hidden="true">
+  <InstrumentFrame title="Heading Indicator" code="HDG" :unit="headingKind" :label="ariaLabel">
+    <svg class="heading-dial" viewBox="0 0 320 320" aria-hidden="true">
       <defs>
-        <radialGradient id="hdg-face" cx="50%" cy="44%" r="62%">
-          <stop offset="0" stop-color="#0a1b2c" />
-          <stop offset="0.74" stop-color="#06111d" />
-          <stop offset="1" stop-color="#030a12" />
+        <linearGradient :id="`${id}-housing`" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#383838" />
+          <stop offset="0.5" stop-color="#1d1d1d" />
+          <stop offset="1" stop-color="#101010" />
+        </linearGradient>
+        <linearGradient :id="`${id}-bezel`" x1="0" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stop-color="#555555" />
+          <stop offset="0.3" stop-color="#111111" />
+          <stop offset="0.7" stop-color="#242424" />
+          <stop offset="1" stop-color="#555555" />
+        </linearGradient>
+        <radialGradient :id="`${id}-face`" cx="48%" cy="42%" r="60%">
+          <stop offset="0" stop-color="#202122" />
+          <stop offset="0.75" stop-color="#151617" />
+          <stop offset="1" stop-color="#060606" />
         </radialGradient>
+        <radialGradient :id="`${id}-screw`" cx="35%" cy="25%">
+          <stop offset="0" stop-color="#636363" />
+          <stop offset="0.5" stop-color="#292929" />
+          <stop offset="1" stop-color="#080808" />
+        </radialGradient>
+        <linearGradient :id="`${id}-knob`" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#656565" />
+          <stop offset="0.4" stop-color="#303030" />
+          <stop offset="1" stop-color="#101010" />
+        </linearGradient>
       </defs>
 
-      <circle
-        :cx="CENTER"
-        :cy="CENTER"
-        r="148"
-        fill="#050c14"
-        stroke="rgba(93, 215, 255, 0.16)"
-      />
-      <circle
-        :cx="CENTER"
-        :cy="CENTER"
-        r="139"
-        fill="none"
-        stroke="rgba(93, 215, 255, 0.08)"
-      />
+      <rect x="3" y="3" width="314" height="314" rx="41"
+        :fill="`url(#${id}-housing)`" stroke="#505050" stroke-width="1.2" />
+      <rect x="7" y="7" width="306" height="306" rx="38" fill="none" stroke="#141414" />
+      <g v-for="screw in screws" :key="`${screw.x}-${screw.y}`" :transform="`translate(${screw.x} ${screw.y})`">
+        <circle r="11" :fill="`url(#${id}-screw)`" stroke="#080808" stroke-width="1.5" />
+        <path d="M-2 -7 H2 V-2 H7 V2 H2 V7 H-2 V2 H-7 V-2 H-2Z"
+          fill="#070707" transform="rotate(20)" />
+      </g>
+      <circle cx="160" cy="160" r="150" fill="#0b0b0b" stroke="#505050" stroke-width="1" />
+      <circle cx="160" cy="160" r="146" :fill="`url(#${id}-bezel)`" stroke="#161616" stroke-width="2" />
+      <circle cx="160" cy="160" r="137" fill="#070707" stroke="#3b3b3b" />
+      <circle cx="160" cy="160" r="130" :fill="`url(#${id}-face)`" />
 
-      <g :transform="cardTransform">
-        <circle
-          :cx="CENTER"
-          :cy="CENTER"
-          r="127"
-          fill="url(#hdg-face)"
-          stroke="rgba(141, 188, 216, 0.22)"
-          stroke-width="1.2"
-        />
-
-        <g v-for="tick in cardTicks" :key="tick.angle">
-          <line
-            :x1="tick.outer.x"
-            :y1="tick.outer.y"
-            :x2="tick.inner.x"
-            :y2="tick.inner.y"
-            :stroke="
-              tick.cardinal
-                ? 'rgba(233, 245, 255, 0.88)'
-                : tick.major
-                  ? 'rgba(233, 245, 255, 0.56)'
-                  : 'rgba(141, 188, 216, 0.28)'
-            "
-            :stroke-width="tick.cardinal ? 1.5 : tick.major ? 1.1 : 0.7"
-          />
+      <g class="compass-card" :transform="cardTransform">
+        <g class="card-ticks">
+          <line v-for="tick in cardTicks" :key="tick.angle"
+            :x1="tick.outer.x" :y1="tick.outer.y" :x2="tick.inner.x" :y2="tick.inner.y"
+            :stroke-width="tick.major ? 3.2 : 1.3" :opacity="tick.major ? 1 : 0.8" />
         </g>
-
-        <text
-          v-for="direction in directionLabels"
-          :key="direction.label"
-          x="160"
-          y="86"
-          :transform="`rotate(${direction.angle} 160 160)`"
-          class="direction-label"
-          :class="{ 'direction-label--diagonal': direction.label.length > 1 }"
-          text-anchor="middle"
-        >
-          {{ direction.label }}
-        </text>
-
-        <text
-          v-for="degree in degreeLabels"
-          :key="degree.angle"
-          x="160"
-          y="101"
-          :transform="`rotate(${degree.angle} 160 160)`"
-          class="degree-label"
-          text-anchor="middle"
-        >
-          {{ degree.label }}
-        </text>
-
-        <circle
-          :cx="CENTER"
-          :cy="CENTER"
-          r="68"
-          fill="none"
-          stroke="rgba(141, 188, 216, 0.06)"
-        />
+        <text v-for="label in cardLabels" :key="label.angle" x="160" y="68"
+          :transform="`rotate(${label.angle} 160 160)`"
+          class="card-label" :class="{ 'card-label--cardinal': label.cardinal }"
+          text-anchor="middle" dominant-baseline="central">{{ label.label }}</text>
       </g>
 
-      <path
-        d="M160 39 L151 18 L169 18 Z"
-        fill="#3ce8ff"
-        stroke="#06101b"
-        stroke-width="1.2"
-      />
-      <line
-        x1="160"
-        y1="20"
-        x2="160"
-        y2="30"
-        stroke="#3ce8ff"
-        stroke-width="1.4"
-      />
+      <path class="heading-index" d="M158 23 H162 V56 H165 L160 73 L155 56 H158Z" fill="#d6d3c8" />
+      <path class="aircraft-reference"
+        d="M160 87 Q156 98 156 111 V139 L108 157 V165 H156 V198 L145 212 H175 L164 198 V165 H212 V157 L164 139 V111 Q164 98 160 87Z"
+        fill="none" stroke="#d6d3c8" stroke-width="2.5" stroke-linejoin="miter" />
+      <text x="160" y="225" class="heading-unit" text-anchor="middle">{{ headingLabel }}</text>
+      <text x="160" y="238" class="heading-value" text-anchor="middle">{{ headingText }}</text>
 
-      <g>
-        <rect
-          x="99"
-          y="142"
-          width="122"
-          height="59"
-          rx="9"
-          fill="rgba(2, 8, 15, 0.95)"
-          stroke="rgba(60, 232, 255, 0.42)"
-          stroke-width="1.1"
-        />
-        <text x="160" y="177" class="heading-value" text-anchor="middle">
-          {{ headingText }}
-        </text>
-        <text x="160" y="191" class="heading-unit" text-anchor="middle">
-          {{ headingLabel }}
-        </text>
+      <g class="decorative-knob" transform="translate(32 285)">
+        <circle r="26" fill="#0b0b0b" stroke="#343434" stroke-width="2" />
+        <circle r="22" :fill="`url(#${id}-knob)`" stroke="#101010" stroke-width="2" />
+        <circle r="18" fill="#292929" stroke="#484848" stroke-width="1" />
       </g>
-
-      <text x="34" y="43" class="hdg-caption">LUBBER</text>
-      <text x="286" y="43" class="hdg-caption" text-anchor="end">CARD</text>
     </svg>
   </InstrumentFrame>
 </template>
 
 <style scoped lang="scss">
-.direction-label {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  fill: rgba(233, 245, 255, 0.94);
-
-  &--diagonal {
-    font-size: 9px;
-    font-weight: 500;
-    fill: rgba(233, 245, 255, 0.68);
-  }
-}
-
-.degree-label {
-  font-family: var(--font-mono);
-  font-size: 7px;
-  fill: rgba(125, 149, 171, 0.68);
-}
-
-.heading-value {
-  font-family: var(--font-mono);
-  font-size: 29px;
-  font-weight: 600;
+.heading-dial {
+  font-family: Arial, Helvetica, sans-serif;
   font-variant-numeric: tabular-nums;
-  fill: var(--cyan-soft);
-  letter-spacing: 0.01em;
 }
-
-.heading-unit {
-  font-family: var(--font-mono);
-  font-size: 6.5px;
-  letter-spacing: 0.18em;
-  fill: var(--muted);
-}
-
-.hdg-caption {
-  font-family: var(--font-mono);
-  font-size: 7px;
-  letter-spacing: 0.12em;
-  fill: rgba(125, 149, 171, 0.5);
-}
+.card-ticks { stroke: #dbd9d2; }
+.card-label { fill: #dbd9d2; font-size: 18px; font-weight: 600; }
+.card-label--cardinal { font-size: 22px; font-weight: 700; }
+.heading-value { font-family: var(--font-mono); font-size: 12px; fill: #e5e2d8; }
+.heading-unit { font-size: 6px; letter-spacing: 1px; fill: #a8a69f; }
 </style>
